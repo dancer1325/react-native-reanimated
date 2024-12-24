@@ -25,6 +25,8 @@
   
   # input "i", "a", "d" or "r" 
   ```
+  * once you enter a valid option -> open http://localhost:8081/ | browser
+    * TODO: Why SAME result / INDEPENDENTLY the option selected?
 
 ### Running | macOS
 
