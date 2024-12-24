@@ -35,34 +35,41 @@
 
 ### Running | iOS
 
-You can either open the workspace in Xcode and launch the app from there:
+* ways
+  * open the workspace | Xcode
 
-```
-open ios/ReanimatedExample.xcworkspace
-```
+     ```
+     open ios/ReanimatedExample.xcworkspace
+     ```
 
-or build and run directly from the command line:
+  * build and run directly -- from the -- CL
 
-```
-yarn react-native run-ios
-```
-
-**Important:** You will need to have an iOS device or simulator connected.
+     ```
+     yarn react-native run-ios
+     ```
+    * Problems: "error Failed to build ios project. "xcodebuild" exited with error code '70'. "
+      * Solution: TODO:
 
 ### Running | Android
 
-You can either open the project with Android Studio and launch the app from there:
+* ways
+  * open the project -- via -- Android Studio & launch the app from there or
 
-```
-open -a "Android Studio" android/
-```
+    ```
+    open -a "Android Studio" android/
+    ```
 
-or build and run directly from the command line:
+  * build and run directly -- from the -- CL
 
-```
-yarn react-native run-android
-```
+    ```
+    yarn react-native run-android
+    ```
+    * Problems:
+      * Problem1: NOTHING start up
+        * Solution: TODO:
+    * if you want to speed up ALL -> run
 
-**Note:** You can also pass `--active-arch-only` flag to build the app only for the current architecture to significantly shorten build time.
-
-**Important:** You will need to have an Android device or emulator connected.
+    ```
+    yarn react-native run-android --active-arch-only
+    ```
+   
