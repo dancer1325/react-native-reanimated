@@ -1,46 +1,39 @@
 ## Running the Example app
 
-1. Clone the repository:
+1. | root, install node_modules
 
-```
-git clone https://github.com/software-mansion/react-native-reanimated
-cd react-native-reanimated
-```
+    ```
+    yarn
+    ```
 
-2. Install node_modules in project root directory:
+2. Build the library
 
-```
-yarn
-```
+   ```
+   yarn build
+   ```
 
-3. Build the library
+3. | `Example/`, install node_modules
 
-```
-yarn build
-```
+   ```
+   cd Example
+   yarn
+   ```
 
-4. Install node_modules in `Example/` directory:
+4. | `apps/*-example/ios/`, install Pods
 
-```
-cd Example
-yarn
-```
+   ```
+   cd ios
+   pod install
+   ```
 
-5. Install Pods in `Example/ios/` directory:
+5. | `apps/*-example/`, start Metro bundler
 
-```
-cd ios
-pod install
-```
+   ```
+   cd ..
+   yarn start
+   ```
 
-6. Start Metro bundler in `Example/` directory
-
-```
-cd ..
-yarn start
-```
-
-### Running on iOS
+### Running | iOS
 
 You can either open the workspace in Xcode and launch the app from there:
 
@@ -56,7 +49,7 @@ yarn react-native run-ios
 
 **Important:** You will need to have an iOS device or simulator connected.
 
-### Running on Android
+### Running | Android
 
 You can either open the project with Android Studio and launch the app from there:
 
