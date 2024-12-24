@@ -1,28 +1,17 @@
 ## Running the NextExample app
 
-You can:
+* `yarn dev`
+  * start the app | development mode
+  * open http://localhost:3000/ | browser
 
-- start the app in development mode:
+* `yarn build && yarn start`
+  * create & run a production build
 
-```
-yarn dev
-```
+* `yarn build:analyze`
+  * analyze the bundle -- via -- Next Bundle Analyzer
+    * == create a report & open it | browser
 
-- create and run a production build:
-
-```
-yarn build
-yarn start
-```
-
-- analyze the bundle with Next Bundle Analyzer. It will create a report and open it in your browser.
-
-```
-yarn build:analyze
-```
-
-- build the project without minification. This is useful when you want to manually review the created bundle.
-
-```
-yarn build:disable-minification
-```
+* `yarn build:disable-minification`
+  * build the project WITHOUT minification
+  * use cases
+    * you want to manually review the created bundle
