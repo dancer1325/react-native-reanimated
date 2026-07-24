@@ -5,9 +5,9 @@ require Pod::Executable.execute_command('node', ['-p',
     {paths: [process.argv[1]]},
   )', __dir__]).strip
 
-require_relative '../../../packages/react-native-reanimated/scripts/clangd-add-xcode-step.rb'
+require_relative '../../../scripts/llvm-tools/add-xcode-step.rb'
 
-ENV['REANIMATED_EXAMPLE_APP_NAME'] = 'TVOSExample'
+ENV['IS_REANIMATED_EXAMPLE_APP'] = '1'
 
 platform :tvos, min_ios_version_supported
 prepare_react_native_project!
@@ -27,13 +27,7 @@ target 'TVOSExample' do
     :app_path => "#{Pod::Config.instance.installation_root}/.."
   )
 
-  target 'TVOSExampleTests' do
-    inherit! :complete
-    # Pods for testing
-  end
-
   post_install do |installer|
-    # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
     react_native_post_install(
       installer,
       config[:reactNativePath],
@@ -42,5 +36,5 @@ target 'TVOSExample' do
     )
   end
 
-  add_clangd_generation_step()
+  add_compile_metadata_step()
 end

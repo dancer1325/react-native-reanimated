@@ -1,3 +1,8 @@
+/** @type {import('react-native-worklets/plugin').PluginOptions} */
+const workletsPluginOptions = {
+  strictGlobal: true,
+};
+
 /** @type {import('@babel/core').TransformOptions} */
 module.exports = {
   presets: ['module:@react-native/babel-preset'],
@@ -5,12 +10,13 @@ module.exports = {
     [
       'module-resolver',
       {
-        extensions: ['.js', '.ts', '.tsx'],
         alias: {
           'react-native': './node_modules/react-native-macos',
+          '@': '../common-app/src',
         },
+        extensions: ['.js', '.jsx', '.ts', '.tsx'],
       },
     ],
-    ['react-native-reanimated/plugin', { processNestedWorklets: true }],
+    ['react-native-worklets/plugin', workletsPluginOptions],
   ],
 };

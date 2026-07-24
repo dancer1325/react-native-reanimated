@@ -1,18 +1,18 @@
 'use strict';
+import { logger } from '../common';
+import type {
+  AnimatableValue,
+  Animation,
+  AnimationObject,
+  ReduceMotion,
+  Timestamp,
+} from '../commonTypes';
+import type { ClampAnimation } from './commonTypes';
 import {
   defineAnimation,
   getReduceMotionForAnimation,
   recognizePrefixSuffix,
 } from './util';
-import type {
-  Animation,
-  Timestamp,
-  AnimatableValue,
-  AnimationObject,
-  ReduceMotion,
-} from '../commonTypes';
-import type { ClampAnimation } from './commonTypes';
-import { logger } from '../logger';
 
 type withClampType = <T extends number | string>(
   config: {
@@ -84,9 +84,11 @@ export const withClamp = function <T extends number | string>(
       }
 
       function onStart(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         animation: Animation<any>,
         value: AnimatableValue,
         now: Timestamp,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         previousAnimation: Animation<any> | null
       ): void {
         animation.current = value;

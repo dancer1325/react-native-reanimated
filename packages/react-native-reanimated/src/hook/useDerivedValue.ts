@@ -1,20 +1,11 @@
 'use strict';
-import { useEffect, useRef } from 'react';
-import { initialUpdaterRun } from '../animation';
-import type { SharedValue, WorkletFunction } from '../commonTypes';
-import { makeMutable, startMapper, stopMapper } from '../core';
-import type { DependencyList } from './commonTypes';
-import { shouldBeUseWeb } from '../PlatformChecker';
+import type { WorkletFunction } from 'react-native-worklets';
 
-export interface DerivedValue<Value = unknown>
-  extends Readonly<Omit<SharedValue<Value>, 'set'>> {
-  /**
-   * @deprecated Derived values are readonly, don't use this method. It's here
-   *   only to prevent breaking changes in TypeScript types. It will be removed
-   *   in the future.
-   */
-  set: SharedValue<Value>['set'];
-}
+import type { DependencyList } from './commonTypes';
+import type { DerivedValue } from './useDerivedValueCommon';
+import { useDerivedValueBase } from './useDerivedValueCommon';
+
+export type { DerivedValue } from './useDerivedValueCommon';
 
 /**
  * Lets you create new shared values based on existing ones while keeping them
@@ -38,40 +29,11 @@ export function useDerivedValue<Value>(
   updater: WorkletFunction<[], Value>,
   dependencies?: DependencyList
 ): DerivedValue<Value> {
-  const initRef = useRef<SharedValue<Value> | null>(null);
   let inputs = Object.values(updater.__closure ?? {});
-  if (shouldBeUseWeb()) {
-    if (!inputs.length && dependencies?.length) {
-      // let web work without a Babel/SWC plugin
-      inputs = dependencies;
-    }
+  if (!inputs.length && dependencies?.length) {
+    // let web work without a Babel/SWC plugin
+    inputs = dependencies;
   }
 
-  // build dependencies
-  if (dependencies === undefined) {
-    dependencies = [...inputs, updater.__workletHash];
-  } else {
-    dependencies.push(updater.__workletHash);
-  }
-
-  if (initRef.current === null) {
-    initRef.current = makeMutable(initialUpdaterRun(updater));
-  }
-
-  const sharedValue: SharedValue<Value> = initRef.current;
-
-  useEffect(() => {
-    const fun = () => {
-      'worklet';
-      sharedValue.value = updater();
-    };
-    const mapperId = startMapper(fun, inputs, [
-      sharedValue as SharedValue<unknown>,
-    ]);
-    return () => {
-      stopMapper(mapperId);
-    };
-  }, dependencies);
-
-  return sharedValue;
+  return useDerivedValueBase(updater, dependencies, inputs);
 }

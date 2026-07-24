@@ -1,20 +1,19 @@
 'use strict';
-import { defineAnimation, getReduceMotionForAnimation } from '../util';
 import type {
+  Animation,
   AnimationCallback,
   Timestamp,
-  Animation,
 } from '../../commonTypes';
+import { defineAnimation, getReduceMotionForAnimation } from '../util';
+import { rigidDecay } from './rigidDecay';
 import { rubberBandDecay } from './rubberBandDecay';
-import { isValidRubberBandConfig } from './utils';
 import type {
   DecayAnimation,
   DecayConfig,
   DefaultDecayConfig,
   InnerDecayAnimation,
 } from './utils';
-import { rigidDecay } from './rigidDecay';
-import { ReanimatedError } from '../../errors';
+import { isValidRubberBandConfig } from './utils';
 
 export type WithDecayConfig = DecayConfig;
 
@@ -28,26 +27,26 @@ function validateConfig(config: DefaultDecayConfig): void {
   'worklet';
   if (config.clamp) {
     if (!Array.isArray(config.clamp)) {
-      throw new ReanimatedError(
-        `\`config.clamp\` must be an array but is ${typeof config.clamp}.`
+      throw new Error(
+        `[Reanimated] \`config.clamp\` must be an array but is ${typeof config.clamp}.`
       );
     }
     if (config.clamp.length !== 2) {
-      throw new ReanimatedError(
-        `\`clamp array\` must contain 2 items but is given ${
+      throw new Error(
+        `[Reanimated] \`clamp array\` must contain 2 items but is given ${
           config.clamp.length as number
         }.`
       );
     }
   }
   if (config.velocityFactor <= 0) {
-    throw new ReanimatedError(
-      `\`config.velocityFactor\` must be greater then 0 but is ${config.velocityFactor}.`
+    throw new Error(
+      `[Reanimated] \`config.velocityFactor\` must be greater than 0 but is ${config.velocityFactor}.`
     );
   }
   if (config.rubberBandEffect && !config.clamp) {
-    throw new ReanimatedError(
-      'You need to set `clamp` property when using `rubberBandEffect`.'
+    throw new Error(
+      '[Reanimated] You need to set `clamp` property when using `rubberBandEffect`.'
     );
   }
 }
@@ -56,6 +55,7 @@ function validateConfig(config: DefaultDecayConfig): void {
  * Lets you create animations that mimic objects in motion with friction.
  *
  * @param config - The decay animation configuration - {@link DecayConfig}.
+ *   Defaults to {@link DecayConfig} default values.
  * @param callback - A function called upon animation completion -
  *   {@link AnimationCallback}.
  * @returns An [animation
@@ -80,6 +80,7 @@ export const withDecay = function (
     if (userConfig) {
       Object.keys(userConfig).forEach(
         (key) =>
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ((config as any)[key] = userConfig[key as keyof typeof userConfig])
       );
     }
@@ -94,10 +95,13 @@ export const withDecay = function (
       value: number,
       now: Timestamp
     ): void {
+      const initialVelocity = config.velocity;
       animation.current = value;
       animation.lastTimestamp = now;
       animation.startTimestamp = now;
-      animation.initialVelocity = config.velocity;
+      animation.initialVelocity = initialVelocity;
+      animation.velocity = initialVelocity;
+
       validateConfig(config);
 
       if (animation.reduceMotion && config.clamp) {
@@ -109,13 +113,16 @@ export const withDecay = function (
       }
     }
 
+    // To ensure the animation is correctly initialized and starts as expected
+    // we need to set its current value to undefined.
+    // Setting current to 0 breaks the animation.
     return {
       onFrame: decay,
       onStart,
       callback,
       velocity: config.velocity ?? 0,
       initialVelocity: 0,
-      current: 0,
+      current: undefined,
       lastTimestamp: 0,
       startTimestamp: 0,
       reduceMotion: getReduceMotionForAnimation(config.reduceMotion),

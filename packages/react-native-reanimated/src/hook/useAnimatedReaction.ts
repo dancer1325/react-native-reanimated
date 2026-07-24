@@ -1,10 +1,8 @@
 'use strict';
-import { useEffect } from 'react';
-import type { WorkletFunction } from '../commonTypes';
-import { startMapper, stopMapper } from '../core';
+import type { WorkletFunction } from 'react-native-worklets';
+
 import type { DependencyList } from './commonTypes';
-import { useSharedValue } from './useSharedValue';
-import { shouldBeUseWeb } from '../PlatformChecker';
+import { useAnimatedReactionBase } from './useAnimatedReactionCommon';
 
 /**
  * Lets you to respond to changes in a [shared
@@ -35,38 +33,12 @@ export function useAnimatedReaction<PreparedResult>(
   >,
   dependencies?: DependencyList
 ) {
-  const previous = useSharedValue<PreparedResult | null>(null);
-
   let inputs = Object.values(prepare.__closure ?? {});
 
-  if (shouldBeUseWeb()) {
-    if (!inputs.length && dependencies?.length) {
-      // let web work without a Reanimated Babel plugin
-      inputs = dependencies;
-    }
+  if (!inputs.length && dependencies?.length) {
+    // let web work without Worklets Babel plugin
+    inputs = dependencies;
   }
 
-  if (dependencies === undefined) {
-    dependencies = [
-      ...Object.values(prepare.__closure ?? {}),
-      ...Object.values(react.__closure ?? {}),
-      prepare.__workletHash,
-      react.__workletHash,
-    ];
-  } else {
-    dependencies.push(prepare.__workletHash, react.__workletHash);
-  }
-
-  useEffect(() => {
-    const fun = () => {
-      'worklet';
-      const input = prepare();
-      react(input, previous.value);
-      previous.value = input;
-    };
-    const mapperId = startMapper(fun, inputs);
-    return () => {
-      stopMapper(mapperId);
-    };
-  }, dependencies);
+  useAnimatedReactionBase(prepare, react, dependencies, inputs);
 }

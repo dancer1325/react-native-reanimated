@@ -1,98 +1,88 @@
 'use strict';
 import { useEffect, useRef } from 'react';
-import type { WorkletFunction } from '../commonTypes';
-import { isWeb, isJest } from '../PlatformChecker';
-import type { DependencyList, ReanimatedEvent } from './commonTypes';
-import { areDependenciesEqual, buildDependencies } from './utils';
-import { makeShareable } from '../shareables';
+import type { WorkletFunction } from 'react-native-worklets';
+import { isWorkletFunction, makeShareable } from 'react-native-worklets';
 
-interface GeneralHandler<
-  Event extends object,
-  Context extends Record<string, unknown>,
-> {
-  (event: ReanimatedEvent<Event>, context: Context): void;
-}
+import type { UnknownRecord } from '../common';
+import type { DependencyList } from './commonTypes';
+import type { GeneralHandlers, UseHandlerContext } from './useHandlerCommon';
+import {
+  areDependenciesEqual,
+  areWorkletHandlersEqual,
+  ensureWorkletHandlers,
+} from './useHandlerCommon';
 
-type GeneralWorkletHandler<
-  Event extends object,
-  Context extends Record<string, unknown>,
-> = WorkletFunction<[event: ReanimatedEvent<Event>, context: Context]>;
+export type { UseHandlerContext } from './useHandlerCommon';
 
-type GeneralHandlers<
-  Event extends object,
-  Context extends Record<string, unknown>,
-> = Record<string, GeneralHandler<Event, Context> | undefined>;
-
-type GeneralWorkletHandlers<
-  Event extends object,
-  Context extends Record<string, unknown>,
-> = Record<string, GeneralWorkletHandler<Event, Context> | undefined>;
-
-interface ContextWithDependencies<Context extends Record<string, unknown>> {
-  context: Context;
-  savedDependencies: DependencyList;
-}
-
-export interface UseHandlerContext<Context extends Record<string, unknown>> {
-  context: Context;
-  doDependenciesDiffer: boolean;
-  useWeb: boolean;
+function isBabelPluginEnabled(handlers: UnknownRecord): boolean {
+  const handlerFunctions = Object.values(handlers);
+  // If there is no function provided, we assume that the Babel plugin is enabled.
+  return (
+    handlerFunctions.length === 0 || handlerFunctions.some(isWorkletFunction)
+  );
 }
 
 /**
  * Lets you find out whether the event handler dependencies have changed.
  *
  * @param handlers - An object of event handlers.
- * @param dependencies - An optional array of dependencies.
+ * @param dependencies - An optional array of dependencies. Only relevant when
+ *   using Reanimated without the Babel plugin on the Web.
  * @returns An object containing a boolean indicating whether the dependencies
- *   have changed, and a boolean indicating whether the code is running on the
- *   web.
+ *   have changed.
  * @see https://docs.swmansion.com/react-native-reanimated/docs/advanced/useHandler
  */
-// @ts-expect-error This overload is required by our API.
-export function useHandler<
-  Event extends object,
-  Context extends Record<string, unknown>,
->(
+export function useHandler<Event extends object, Context extends UnknownRecord>(
   handlers: GeneralHandlers<Event, Context>,
   dependencies?: DependencyList
-): UseHandlerContext<Context>;
-
-export function useHandler<
-  Event extends object,
-  Context extends Record<string, unknown>,
->(
-  handlers: GeneralWorkletHandlers<Event, Context>,
-  dependencies?: DependencyList
 ): UseHandlerContext<Context> {
-  const initRef = useRef<ContextWithDependencies<Context> | null>(null);
-  if (initRef.current === null) {
-    const context = makeShareable({} as Context);
-    initRef.current = {
-      context,
-      savedDependencies: [],
+  'use no memo';
+
+  const stateRef = useRef<{
+    context: Context | undefined;
+    prevHandlers: GeneralHandlers<Event, Context> | undefined;
+    prevDependencies: DependencyList;
+  } | null>(null);
+
+  if (stateRef.current === null) {
+    stateRef.current = {
+      context: undefined,
+      prevHandlers: undefined,
+      prevDependencies: [],
     };
   }
 
+  const state = stateRef.current;
+  let doDependenciesDiffer = true;
+
+  if (isBabelPluginEnabled(handlers)) {
+    if (__DEV__) {
+      ensureWorkletHandlers(handlers);
+    }
+    doDependenciesDiffer = !areWorkletHandlersEqual(
+      handlers as Record<string, WorkletFunction>,
+      state.prevHandlers as Record<string, WorkletFunction>
+    );
+  } else if (dependencies) {
+    doDependenciesDiffer = !areDependenciesEqual(
+      dependencies,
+      state.prevDependencies
+    );
+  }
+
+  // Write after commit to avoid corruption from interrupted renders (in case of concurrent mode).
   useEffect(() => {
-    return () => {
-      initRef.current = null;
-    };
-  }, []);
+    state.prevHandlers = handlers;
+    state.prevDependencies = dependencies;
+  });
 
-  const { context, savedDependencies } = initRef.current;
-
-  dependencies = buildDependencies(
-    dependencies,
-    handlers as Record<string, WorkletFunction | undefined>
-  );
-
-  const doDependenciesDiffer = !areDependenciesEqual(
-    dependencies,
-    savedDependencies
-  );
-  initRef.current.savedDependencies = dependencies;
-  const useWeb = isWeb() || isJest();
-
-  return { context, doDependenciesDiffer, useWeb };
+  return {
+    get context() {
+      if (state.context === undefined) {
+        state.context = makeShareable({} as Context);
+      }
+      return state.context;
+    },
+    doDependenciesDiffer,
+  };
 }

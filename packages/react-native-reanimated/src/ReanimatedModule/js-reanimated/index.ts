@@ -1,34 +1,14 @@
 'use strict';
-import type { StyleProps, AnimatedStyle } from '../../commonTypes';
+import { logger } from '../../common';
+import type { AnimatedStyle, StyleProps } from '../../commonTypes';
+import type { PropUpdates } from '../../createAnimatedComponent/commonTypes';
 import {
   createReactDOMStyle,
-  createTransformValue,
   createTextShadowValue,
+  createTransformValue,
 } from './webUtils';
-import { PropsAllowlists } from '../../propsAllowlists';
-import { logger } from '../../logger';
-import { ReanimatedError } from '../../errors';
 
 export { createJSReanimatedModule } from './JSReanimated';
-
-// TODO: Install these global functions in a more suitable location.
-global._makeShareableClone = () => {
-  throw new ReanimatedError(
-    '`_makeShareableClone` should never be called from React runtime.'
-  );
-};
-
-global._scheduleHostFunctionOnJS = () => {
-  throw new ReanimatedError(
-    '`_scheduleOnJS` should never be called from React runtime.'
-  );
-};
-
-global._scheduleOnRuntime = () => {
-  throw new ReanimatedError(
-    '`_scheduleOnRuntime` should never be called from React runtime.'
-  );
-};
 
 interface JSReanimatedComponent {
   previousStyle: StyleProps;
@@ -47,14 +27,14 @@ export interface ReanimatedHTMLElement extends HTMLElement {
   _touchableNode: {
     setAttribute: (key: string, props: unknown) => void;
   };
-  reanimatedDummy?: boolean;
+  isDummy?: boolean;
+  dummyClone?: ReanimatedHTMLElement;
   removedAfterAnimation?: boolean;
 }
 
 // TODO: Move these functions outside of index file.
 export const _updatePropsJS = (
-  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
-  updates: StyleProps | AnimatedStyle<any>,
+  updates: PropUpdates,
   viewRef: (JSReanimatedComponent | ReanimatedHTMLElement) & {
     getAnimatableRef?: () => JSReanimatedComponent | ReanimatedHTMLElement;
   },
@@ -65,6 +45,7 @@ export const _updatePropsJS = (
       ? viewRef.getAnimatableRef()
       : viewRef;
     const [rawStyles] = Object.keys(updates).reduce(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (acc: [StyleProps, AnimatedStyle<any>], key) => {
         const value = updates[key];
         const index = typeof value === 'function' ? 1 : 0;
@@ -86,9 +67,9 @@ export const _updatePropsJS = (
       // React Native Web 0.19+ no longer provides setNativeProps function,
       // so we need to update DOM nodes directly.
       updatePropsDOM(component, rawStyles, isAnimatedProps);
-    } else if (Object.keys(component.props).length > 0) {
+    } else if (component.props && Object.keys(component.props).length > 0) {
       Object.keys(component.props).forEach((key) => {
-        if (!rawStyles[key]) {
+        if (!(key in rawStyles)) {
           return;
         }
         const dashedKey = key.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase());
@@ -110,15 +91,9 @@ const setNativeProps = (
   isAnimatedProps?: boolean
 ): void => {
   if (isAnimatedProps) {
-    const uiProps: Record<string, unknown> = {};
-    for (const key in newProps) {
-      if (isNativeProp(key)) {
-        uiProps[key] = newProps[key];
-      }
-    }
     // Only update UI props directly on the component,
     // other props can be updated as standard style props.
-    component.setNativeProps?.(uiProps);
+    component.setNativeProps?.(newProps);
   }
 
   const previousStyle = component.previousStyle ? component.previousStyle : {};
@@ -159,13 +134,16 @@ const updatePropsDOM = (
 
   for (const key in domStyle) {
     if (isAnimatedProps) {
-      (component as HTMLElement).setAttribute(key, domStyle[key]);
+      // We need to explicitly set the 'text' property on input component because React Native's
+      // internal _valueTracker (https://github.com/facebook/react/blob/main/packages/react-dom-bindings/src/client/inputValueTracking.js)
+      // prevents updates when only modifying attributes.
+      if ((component as HTMLElement).nodeName === 'INPUT' && key === 'text') {
+        (component as HTMLInputElement).value = domStyle[key] as string;
+      } else {
+        (component as HTMLElement).setAttribute(key, domStyle[key]);
+      }
     } else {
       (component.style as StyleProps)[key] = domStyle[key];
     }
   }
 };
-
-function isNativeProp(propName: string): boolean {
-  return !!PropsAllowlists.NATIVE_THREAD_PROPS_WHITELIST[propName];
-}

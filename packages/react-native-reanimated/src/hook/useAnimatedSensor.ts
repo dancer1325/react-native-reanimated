@@ -1,18 +1,18 @@
 'use strict';
 import { useEffect, useMemo, useRef } from 'react';
-import { initializeSensor, registerSensor, unregisterSensor } from '../core';
+
 import type {
-  SensorConfig,
   AnimatedSensor,
+  SensorConfig,
   Value3D,
   ValueRotation,
 } from '../commonTypes';
 import {
-  SensorType,
-  IOSReferenceFrame,
   InterfaceOrientation,
+  IOSReferenceFrame,
+  SensorType,
 } from '../commonTypes';
-import { callMicrotasks } from '../threads';
+import { initializeSensor, registerSensor, unregisterSensor } from '../core';
 
 // euler angles are in order ZXY, z = yaw, x = pitch, y = roll
 // https://github.com/mrdoob/three.js/blob/dev/src/math/Quaternion.js#L237
@@ -116,6 +116,7 @@ export function useAnimatedSensor(
       iosReferenceFrame: IOSReferenceFrame.Auto,
       ...userConfigRef.current,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [userConfigRef.current]
   );
 
@@ -152,7 +153,6 @@ export function useAnimatedSensor(
         }
       }
       sensorData.value = data;
-      callMicrotasks();
     });
 
     if (id !== -1) {

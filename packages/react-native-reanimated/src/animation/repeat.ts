@@ -1,14 +1,14 @@
 'use strict';
-import { defineAnimation, getReduceMotionForAnimation } from './util';
 import type {
+  AnimatableValue,
   Animation,
   AnimationCallback,
-  AnimatableValue,
-  Timestamp,
   AnimationObject,
   ReduceMotion,
+  Timestamp,
 } from '../commonTypes';
 import type { RepeatAnimation } from './commonTypes';
+import { defineAnimation, getReduceMotionForAnimation } from './util';
 
 // TODO TYPESCRIPT This is a temporary type to get rid of .d.ts file.
 type withRepeatType = <T extends AnimatableValue>(
@@ -104,6 +104,7 @@ export const withRepeat = function <T extends AnimationObject>(
         animation: RepeatAnimation,
         value: AnimatableValue,
         now: Timestamp,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         previousAnimation: Animation<any> | null
       ): void {
         animation.startValue = value;

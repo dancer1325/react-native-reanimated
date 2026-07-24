@@ -1,11 +1,20 @@
+/** @type {import('react-native-worklets/plugin').PluginOptions} */
+const workletsPluginOptions = {
+  strictGlobal: true,
+};
+
 /** @type {import('@babel/core').TransformOptions} */
 module.exports = {
   presets: ['next/babel'],
   plugins: [
     [
+      'babel-plugin-transform-define',
+      { __DEV__: process.env.NODE_ENV !== 'production' },
+    ],
+    [
       'module-resolver',
       {
-        extensions: ['.js', '.ts', '.tsx', '.jsx'],
+        extensions: ['.js', '.jsx', '.ts', '.tsx'],
         alias: {
           'react-native': '../../node_modules/react-native-web',
           // Uncomment this if you want fast-refresh to work with reanimated:
@@ -13,6 +22,6 @@ module.exports = {
         },
       },
     ],
-    'react-native-reanimated/plugin',
+    ['react-native-worklets/plugin', workletsPluginOptions],
   ],
 };

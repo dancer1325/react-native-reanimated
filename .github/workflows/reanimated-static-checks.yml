@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  check:
+  reanimated-static-checks:
     if: github.repository == 'software-mansion/react-native-reanimated'
     runs-on: ubuntu-latest
     concurrency:
@@ -21,35 +21,13 @@ jobs:
       cancel-in-progress: true
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          cache: 'yarn'
-      - name: Clear annotations
-        run: .github/workflows/helper/clear-annotations.sh
-
-      - name: Install monorepo node dependencies
-        run: yarn install --immutable
-      - name: Build Reanimated for TypeScript types
-        working-directory: packages/react-native-reanimated
-        run: yarn build
-
-      - name: Check TypeScript types
-        working-directory: packages/react-native-reanimated
-        run: yarn type:check
-      - name: Lint JavaScript
-        working-directory: packages/react-native-reanimated
-        run: yarn lint:js
-      - name: Find unused code
-        working-directory: packages/react-native-reanimated
-        run: yarn find-unused-code:js
-      - name: Find circular dependencies
-        working-directory: packages/react-native-reanimated
-        run: yarn circular-dependency-check
-      - name: Check use strict
-        working-directory: packages/react-native-reanimated
-        run: yarn use-strict-check
-      - name: Run jest unit tests
-        working-directory: packages/react-native-reanimated
-        run: yarn test
+          cache: yarn
+      - name: Run static checks
+        uses: ./.github/actions/package-static-checks
+        with:
+          package-dir: packages/react-native-reanimated
+          build-commands: yarn workspace react-native-reanimated build

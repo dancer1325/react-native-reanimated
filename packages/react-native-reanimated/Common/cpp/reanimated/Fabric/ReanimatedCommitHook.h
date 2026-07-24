@@ -1,8 +1,7 @@
 #pragma once
-#ifdef RCT_NEW_ARCH_ENABLED
 
-#include <reanimated/Fabric/PropsRegistry.h>
-#include <reanimated/LayoutAnimations/LayoutAnimationsProxy.h>
+#include <reanimated/Fabric/updates/UpdatesRegistryManager.h>
+#include <reanimated/LayoutAnimations/LayoutAnimationsProxyCommon.h>
 
 #include <react/renderer/uimanager/UIManagerCommitHook.h>
 
@@ -12,12 +11,12 @@ using namespace facebook::react;
 
 namespace reanimated {
 
-class ReanimatedCommitHook : public UIManagerCommitHook {
+class ReanimatedCommitHook : public UIManagerCommitHook, public std::enable_shared_from_this<ReanimatedCommitHook> {
  public:
   ReanimatedCommitHook(
-      const std::shared_ptr<PropsRegistry> &propsRegistry,
       const std::shared_ptr<UIManager> &uiManager,
-      const std::shared_ptr<LayoutAnimationsProxy> &layoutAnimationsProxy);
+      const std::shared_ptr<UpdatesRegistryManager> &updatesRegistryManager,
+      const std::shared_ptr<LayoutAnimationsProxyCommon> &layoutAnimationsProxy);
 
   ~ReanimatedCommitHook() noexcept override;
 
@@ -30,14 +29,13 @@ class ReanimatedCommitHook : public UIManagerCommitHook {
   RootShadowNode::Unshared shadowTreeWillCommit(
       ShadowTree const &shadowTree,
       RootShadowNode::Shared const &oldRootShadowNode,
-      RootShadowNode::Unshared const &newRootShadowNode) noexcept override;
+      RootShadowNode::Unshared const &newRootShadowNode,
+      const ShadowTreeCommitOptions &commitOptions) noexcept override;
 
  private:
-  std::shared_ptr<PropsRegistry> propsRegistry_;
-
   std::shared_ptr<UIManager> uiManager_;
-
-  std::shared_ptr<LayoutAnimationsProxy> layoutAnimationsProxy_;
+  std::shared_ptr<UpdatesRegistryManager> updatesRegistryManager_;
+  std::shared_ptr<LayoutAnimationsProxyCommon> layoutAnimationsProxy_;
 
   SurfaceId currentMaxSurfaceId_ = -1;
 
@@ -45,5 +43,3 @@ class ReanimatedCommitHook : public UIManagerCommitHook {
 };
 
 } // namespace reanimated
-
-#endif // RCT_NEW_ARCH_ENABLED

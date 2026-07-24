@@ -1,8 +1,9 @@
+import { version as packageVersion } from '../package.json';
+import { logger } from '../src/common';
 import {
   checkCppVersion,
   matchVersion,
 } from '../src/platform-specific/checkCppVersion';
-import { version as packageVersion } from '../package.json';
 
 describe('checkCppVersion', () => {
   beforeEach(() => {
@@ -13,40 +14,40 @@ describe('checkCppVersion', () => {
     delete global._REANIMATED_VERSION_CPP;
   });
 
-  it('checks version successfully', () => {
-    jest.spyOn(console, 'warn').mockImplementation();
+  test('checks version successfully', () => {
+    jest.spyOn(logger, 'warn').mockImplementation();
     checkCppVersion();
-    expect(console.warn).not.toBeCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
     jest.clearAllMocks();
   });
 
-  it('throws error when version is undefined', () => {
-    jest.spyOn(console, 'warn').mockImplementation();
+  test('logs warning when version is undefined', () => {
+    jest.spyOn(logger, 'warn').mockImplementation();
     delete global._REANIMATED_VERSION_CPP;
     checkCppVersion();
-    expect(console.warn).toBeCalled();
+    expect(logger.warn).toHaveBeenCalled();
     jest.clearAllMocks();
   });
 });
 
 describe('matchVersion', () => {
-  it('matches versions', () => {
+  test('matches versions', () => {
     expect(matchVersion('1.2.3', '1.2.3')).toBe(true);
   });
 
-  it('validates patch mismatch', () => {
+  test('validates patch mismatch', () => {
     expect(matchVersion('1.2.3', '1.2.4')).toBe(true);
   });
 
-  it('invalidates minor mismatch', () => {
+  test('invalidates minor mismatch', () => {
     expect(matchVersion('1.2.3', '1.3.3')).toBe(false);
   });
 
-  it('invalidates major mismatch', () => {
+  test('invalidates major mismatch', () => {
     expect(matchVersion('1.2.3', '2.2.3')).toBe(false);
   });
 
-  it('validates rc versions', () => {
+  test('validates rc versions', () => {
     expect(matchVersion('1.2.3-rc.10', '1.2.3-rc.10')).toBe(true);
   });
 });

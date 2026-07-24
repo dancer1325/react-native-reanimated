@@ -1,29 +1,29 @@
 'use strict';
-import { Easing } from '../../Easing';
 import { withDelay, withSequence, withTiming } from '../../animation';
-import type {
-  StyleProps,
-  EasingFunction,
-  TransformArrayItem,
-  AnimationFunction,
-  EntryExitAnimationFunction,
-  IEntryExitAnimationBuilder,
-  KeyframeProps,
-  MaybeInvalidKeyframeProps,
-  StylePropsWithArrayTransform,
-  ValidKeyframeProps,
-} from '../../commonTypes';
-import { ReduceMotion } from '../../commonTypes';
 import {
   assertEasingIsWorklet,
   getReduceMotionFromConfig,
 } from '../../animation/util';
-import { ReanimatedError } from '../../errors';
+import type {
+  AnimationFunction,
+  EasingFunction,
+  EntryExitAnimationFunction,
+  IEntryExitAnimationBuilder,
+  KeyframeProps,
+  MaybeInvalidKeyframeProps,
+  StyleProps,
+  StylePropsWithArrayTransform,
+  TransformArrayItem,
+  ValidKeyframeProps,
+} from '../../commonTypes';
+import { ReduceMotion } from '../../commonTypes';
+import type { EasingFunctionFactory } from '../../Easing';
+import { Easing } from '../../Easing';
 
 interface KeyframePoint {
   duration: number;
   value: number | string;
-  easing?: EasingFunction;
+  easing?: EasingFunction | EasingFunctionFactory;
 }
 interface ParsedKeyframesDefinition {
   initialValues: StyleProps;
@@ -36,6 +36,7 @@ class InnerKeyframe implements IEntryExitAnimationBuilder {
   reduceMotionV: ReduceMotion = ReduceMotion.System;
   callbackV?: (finished: boolean) => void;
   definitions: MaybeInvalidKeyframeProps;
+  parsedAnimation?: EntryExitAnimationFunction;
 
   /*
     Keyframe definition should be passed in the constructor as the map
@@ -46,7 +47,7 @@ class InnerKeyframe implements IEntryExitAnimationBuilder {
   }
 
   private parseDefinitions(): ParsedKeyframesDefinition {
-    /* 
+    /*
         Each style property contain an array with all their key points: 
         value, duration of transition to that value, and optional easing function (defaults to Linear)
     */
@@ -56,8 +57,8 @@ class InnerKeyframe implements IEntryExitAnimationBuilder {
     */
     if (this.definitions.from) {
       if (this.definitions['0']) {
-        throw new ReanimatedError(
-          "You cannot provide both keyframe 0 and 'from' as they both specified initial values."
+        throw new Error(
+          "[Reanimated] You cannot provide both keyframe 0 and 'from' as they both specified initial values."
         );
       }
       this.definitions['0'] = this.definitions.from;
@@ -65,20 +66,20 @@ class InnerKeyframe implements IEntryExitAnimationBuilder {
     }
     if (this.definitions.to) {
       if (this.definitions['100']) {
-        throw new ReanimatedError(
-          "You cannot provide both keyframe 100 and 'to' as they both specified values at the end of the animation."
+        throw new Error(
+          "[Reanimated] You cannot provide both keyframe 100 and 'to' as they both specified values at the end of the animation."
         );
       }
       this.definitions['100'] = this.definitions.to;
       delete this.definitions.to;
     }
-    /* 
+    /*
       One of the assumptions is that keyframe  0 is required to properly set initial values.
       Every other keyframe should contain properties from the set provided as initial values.
     */
     if (!this.definitions['0']) {
-      throw new ReanimatedError(
-        "Please provide 0 or 'from' keyframe with initial state of your object."
+      throw new Error(
+        "[Reanimated] Please provide 0 or 'from' keyframe with initial state of your object."
       );
     }
     const initialValues: StyleProps = this.definitions['0'] as StyleProps;
@@ -117,7 +118,7 @@ class InnerKeyframe implements IEntryExitAnimationBuilder {
       return maxDuration - currentDuration;
     };
 
-    /* 
+    /*
        Other keyframes can't contain properties that were not specified in initial keyframe.
     */
     const addKeyPoint = ({
@@ -129,11 +130,11 @@ class InnerKeyframe implements IEntryExitAnimationBuilder {
       key: string;
       value: string | number;
       currentKeyPoint: number;
-      easing?: EasingFunction;
+      easing?: EasingFunction | EasingFunctionFactory;
     }): void => {
       if (!(key in parsedKeyframes)) {
-        throw new ReanimatedError(
-          "Keyframe can contain only that set of properties that were provide with initial values (keyframe 0 or 'from')"
+        throw new Error(
+          "[Reanimated] Keyframe can contain only that set of properties that were provide with initial values (keyframe 0 or 'from')"
         );
       }
 
@@ -152,8 +153,8 @@ class InnerKeyframe implements IEntryExitAnimationBuilder {
       .sort((a: number, b: number) => a - b)
       .forEach((keyPoint: number) => {
         if (keyPoint < 0 || keyPoint > 100) {
-          throw new ReanimatedError(
-            'Keyframe should be in between range 0 - 100.'
+          throw new Error(
+            '[Reanimated] Keyframe should be in between range 0 - 100.'
           );
         }
         const keyframe: KeyframeProps = this.definitions[keyPoint];
@@ -232,11 +233,15 @@ class InnerKeyframe implements IEntryExitAnimationBuilder {
     const { keyframes, initialValues } = this.parseDefinitions();
     const callback = this.callbackV;
 
-    return () => {
+    if (this.parsedAnimation) {
+      return this.parsedAnimation;
+    }
+
+    this.parsedAnimation = () => {
       'worklet';
       const animations: StylePropsWithArrayTransform = {};
 
-      /* 
+      /*
             For each style property, an animations sequence is created that corresponds with its key points.
             Transform style properties require special handling because of their nested structure.
       */
@@ -296,6 +301,7 @@ class InnerKeyframe implements IEntryExitAnimationBuilder {
         callback,
       };
     };
+    return this.parsedAnimation;
   };
 }
 

@@ -1,6 +1,6 @@
 'use strict';
-import { SLOPE_FACTOR, VELOCITY_EPS } from './utils';
 import type { DefaultDecayConfig, InnerDecayAnimation } from './utils';
+import { SLOPE_FACTOR, VELOCITY_EPS } from './utils';
 
 export function rigidDecay(
   animation: InnerDecayAnimation,
@@ -11,7 +11,7 @@ export function rigidDecay(
   const { lastTimestamp, startTimestamp, initialVelocity, current, velocity } =
     animation;
 
-  const deltaTime = Math.min(now - lastTimestamp, 64);
+  const deltaTime = Math.min(Math.max(now - lastTimestamp, 0), 64);
   const v =
     velocity *
     Math.exp(

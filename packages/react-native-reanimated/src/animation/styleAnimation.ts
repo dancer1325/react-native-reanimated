@@ -1,18 +1,18 @@
 'use strict';
-import { defineAnimation } from './util';
+import { ColorProperties } from '../Colors';
+import { logger, processColor } from '../common';
 import type {
-  Timestamp,
   AnimatableValue,
-  AnimationObject,
+  AnimatedStyle,
   Animation,
+  AnimationObject,
   NestedObject,
   NestedObjectValues,
-  AnimatedStyle,
+  Timestamp,
 } from '../commonTypes';
 import type { StyleLayoutAnimation } from './commonTypes';
 import { withTiming } from './timing';
-import { ColorProperties, processColor } from '../Colors';
-import { logger } from '../logger';
+import { defineAnimation, isValidLayoutAnimationProp } from './util';
 
 // resolves path to value for nested objects
 // if path cannot be resolved returns undefined
@@ -72,7 +72,9 @@ interface NestedObjectEntry<T> {
 }
 
 export function withStyleAnimation(
-  styleAnimations: AnimatedStyle<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  styleAnimations: AnimatedStyle<any>,
+  callback?: (finished: boolean) => void
 ): StyleLayoutAnimation {
   'worklet';
   return defineAnimation<StyleLayoutAnimation>({}, () => {
@@ -128,9 +130,11 @@ export function withStyleAnimation(
 
           // When working with animations changing colors, we need to make sure that each one of them begins with a rgba, not a processed number.
           // Thus, we only set the path to a processed color, but currentStyleAnimation.current stays as rgba.
-          const isAnimatingColorProp = ColorProperties.includes(
-            currentEntry.path[0] as string
-          );
+          const isAnimatingColorProp =
+            ColorProperties.includes(currentEntry.path[0] as string) ||
+            (currentEntry.path[0] === 'boxShadow' &&
+              currentEntry.path.length > 2 &&
+              currentEntry.path[2] === 'color');
 
           setPath(
             animation.current,
@@ -146,6 +150,7 @@ export function withStyleAnimation(
 
     const onStart = (
       animation: StyleLayoutAnimation,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       value: AnimatedStyle<any>,
       now: Timestamp,
       previousAnimation: StyleLayoutAnimation
@@ -183,14 +188,26 @@ export function withStyleAnimation(
           );
           let prevVal = resolvePath(value, currentEntry.path);
           if (prevAnimation && !prevVal) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             prevVal = (prevAnimation as any).current;
           }
-          if (prevVal === undefined) {
-            logger.warn(
-              `Initial values for animation are missing for property ${currentEntry.path.join(
-                '.'
-              )}`
-            );
+          if (__DEV__) {
+            if (prevVal === undefined) {
+              logger.warn(
+                `Initial values for animation are missing for property ${currentEntry.path.join(
+                  '.'
+                )}`
+              );
+            }
+            const propName = currentEntry.path[0];
+            if (
+              typeof propName === 'string' &&
+              !isValidLayoutAnimationProp(propName.trim())
+            ) {
+              logger.warn(
+                `'${propName}' property is not officially supported for layout animations. It may not work as expected.`
+              );
+            }
           }
           setPath(animation.current, currentEntry.path, prevVal);
           let currentAnimation: AnimationObject;
@@ -220,7 +237,7 @@ export function withStyleAnimation(
       }
     };
 
-    const callback = (finished: boolean): void => {
+    const styleAnimationCallback = (finished: boolean): void => {
       if (!finished) {
         const animationsToCheck: NestedObjectValues<AnimationObject>[] = [
           styleAnimations,
@@ -251,6 +268,7 @@ export function withStyleAnimation(
           }
         }
       }
+      callback?.(finished);
     };
 
     return {
@@ -259,7 +277,7 @@ export function withStyleAnimation(
       onStart,
       current: {},
       styleAnimations,
-      callback,
+      callback: styleAnimationCallback,
     } as StyleLayoutAnimation;
   });
 }

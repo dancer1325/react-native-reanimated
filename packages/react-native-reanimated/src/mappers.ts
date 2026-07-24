@@ -1,24 +1,15 @@
 'use strict';
+
+import { scheduleOnUI } from 'react-native-worklets';
+
+import { IS_JEST } from './common';
 import type {
-  MapperRawInputs,
+  Mapper,
+  MapperExtractedInputs,
   MapperOutputs,
-  SharedValue,
+  MapperRawInputs,
 } from './commonTypes';
-import { isJest } from './PlatformChecker';
-import { runOnUI } from './threads';
 import { isSharedValue } from './isSharedValue';
-
-const IS_JEST = isJest();
-
-type MapperExtractedInputs = SharedValue[];
-
-type Mapper = {
-  id: number;
-  dirty: boolean;
-  worklet: () => void;
-  inputs: MapperExtractedInputs;
-  outputs?: MapperOutputs;
-};
 
 function createMapperRegistry() {
   'worklet';
@@ -30,7 +21,7 @@ function createMapperRegistry() {
 
   function updateMappersOrder() {
     // sort mappers topologically
-    // the algorithm here takes adventage of a fact that the topological order
+    // the algorithm here takes advantage of a fact that the topological order
     // of a transposed graph is a reverse topological order of the original graph
     // The graph in our case consists of mappers and an edge between two mappers
     // A and B exists if there is a shared value that's on A's output lists and on
@@ -86,8 +77,14 @@ function createMapperRegistry() {
     sortedMappers = newOrder;
   }
 
+  let mapperRunFinalizers: (() => void)[] = [];
+  global.__requestMapperRunFinalizer = (finalizer: () => void) => {
+    mapperRunFinalizers.push(finalizer);
+  };
+
+  let isAnyMapperDirty = false;
+
   function mapperRun() {
-    runRequested = false;
     if (processingMappers) {
       return;
     }
@@ -96,16 +93,33 @@ function createMapperRegistry() {
       if (mappers.size !== sortedMappers.length) {
         updateMappersOrder();
       }
-      for (const mapper of sortedMappers) {
-        if (mapper.dirty) {
-          mapper.dirty = false;
-          mapper.worklet();
+      if (isAnyMapperDirty) {
+        isAnyMapperDirty = false;
+        for (const mapper of sortedMappers) {
+          if (mapper.dirty) {
+            mapper.dirty = false;
+            mapper.worklet();
+          }
         }
       }
     } finally {
       processingMappers = false;
+      const finalizers = mapperRunFinalizers;
+      mapperRunFinalizers = [];
+      for (const finalizer of finalizers) {
+        finalizer();
+      }
     }
   }
+
+  const schedulingFunction = requestAnimationFrame;
+
+  function scheduledMapperRun() {
+    runRequested = false;
+    mapperRun();
+  }
+
+  global.__mapperRun = mapperRun;
 
   function maybeRequestUpdates() {
     if (IS_JEST) {
@@ -129,9 +143,9 @@ function createMapperRegistry() {
         // we are already in mapper-run phase, and in that case we use `requestAnimationFrame`
         // instead of `queueMicrotask` which will schedule mapper run for the next
         // frame instead of queuing another set of updates in the same frame.
-        requestAnimationFrame(mapperRun);
+        schedulingFunction(scheduledMapperRun);
       } else {
-        queueMicrotask(mapperRun);
+        queueMicrotask(scheduledMapperRun);
       }
       runRequested = true;
     }
@@ -143,7 +157,9 @@ function createMapperRegistry() {
   ): MapperExtractedInputs {
     if (Array.isArray(inputs)) {
       for (const input of inputs) {
-        input && extractInputs(input, resultArray);
+        if (input) {
+          extractInputs(input, resultArray);
+        }
       }
     } else if (isSharedValue(inputs)) {
       resultArray.push(inputs);
@@ -152,7 +168,9 @@ function createMapperRegistry() {
       // is of a derivative class (e.g. HostObject on web, or Map) we don't scan
       // it recursively
       for (const element of Object.values(inputs as Record<string, unknown>)) {
-        element && extractInputs(element, resultArray);
+        if (element) {
+          extractInputs(element, resultArray);
+        }
       }
     }
     return resultArray;
@@ -174,9 +192,11 @@ function createMapperRegistry() {
       };
       mappers.set(mapper.id, mapper);
       sortedMappers = [];
+      isAnyMapperDirty = true;
       for (const sv of mapper.inputs) {
         sv.addListener(mapper.id, () => {
           mapper.dirty = true;
+          isAnyMapperDirty = true;
           maybeRequestUpdates();
         });
       }
@@ -187,6 +207,7 @@ function createMapperRegistry() {
       if (mapper) {
         mappers.delete(mapper.id);
         sortedMappers = [];
+        isAnyMapperDirty = true;
         for (const sv of mapper.inputs) {
           sv.removeListener(mapper.id);
         }
@@ -204,20 +225,20 @@ export function startMapper(
 ): number {
   const mapperID = (MAPPER_ID += 1);
 
-  runOnUI(() => {
+  scheduleOnUI(() => {
     let mapperRegistry = global.__mapperRegistry;
     if (mapperRegistry === undefined) {
       mapperRegistry = global.__mapperRegistry = createMapperRegistry();
     }
     mapperRegistry.start(mapperID, worklet, inputs, outputs);
-  })();
+  });
 
   return mapperID;
 }
 
 export function stopMapper(mapperID: number): void {
-  runOnUI(() => {
+  scheduleOnUI(() => {
     const mapperRegistry = global.__mapperRegistry;
     mapperRegistry?.stop(mapperID);
-  })();
+  });
 }

@@ -1,4 +1,12 @@
 'use strict';
+import type {
+  AnimatableValue,
+  Animation,
+  AnimationCallback,
+  EasingFunction,
+  ReduceMotion,
+  Timestamp,
+} from '../commonTypes';
 import type { EasingFunctionFactory } from '../Easing';
 import { Easing } from '../Easing';
 import {
@@ -6,14 +14,6 @@ import {
   defineAnimation,
   getReduceMotionForAnimation,
 } from './util';
-import type {
-  Animation,
-  AnimationCallback,
-  Timestamp,
-  AnimatableValue,
-  ReduceMotion,
-  EasingFunction,
-} from '../commonTypes';
 
 /**
  * The timing animation configuration.
@@ -44,8 +44,10 @@ export interface TimingAnimation extends Animation<TimingAnimation> {
   current: AnimatableValue;
 }
 
-interface InnerTimingAnimation
-  extends Omit<TimingAnimation, 'toValue' | 'current'> {
+interface InnerTimingAnimation extends Omit<
+  TimingAnimation,
+  'toValue' | 'current'
+> {
   toValue: number;
   current: number;
 }
@@ -63,6 +65,7 @@ type withTimingType = <T extends AnimatableValue>(
  * @param toValue - The value on which the animation will come at rest -
  *   {@link AnimatableValue}.
  * @param config - The timing animation configuration - {@link TimingConfig}.
+ *   Defaults to {@link TimingConfig} default values.
  * @param callback - A function called on animation complete -
  *   {@link AnimationCallback}.
  * @returns An [animation
@@ -90,6 +93,7 @@ export const withTiming = function (
     if (userConfig) {
       Object.keys(userConfig).forEach(
         (key) =>
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ((config as any)[key] = userConfig[key as keyof typeof userConfig])
       );
     }

@@ -1,43 +1,78 @@
 'use strict';
 
-import { Animations, TransitionType } from './config';
+import { logger } from '../../common';
+import { removeElementAnimation } from '../../common/web';
+import { LayoutAnimationType, ReduceMotion } from '../../commonTypes';
+import type { EasingFunctionFactory } from '../../Easing';
+import { EasingNameSymbol } from '../../Easing';
+import type { ReanimatedHTMLElement } from '../../ReanimatedModule/js-reanimated';
+import { _updatePropsJS } from '../../ReanimatedModule/js-reanimated';
+import { ReducedMotionManager } from '../../ReducedMotion';
+import { Keyframe } from '../animationBuilder';
+import type { TransitionData } from './animationParser';
+import type { ReanimatedSnapshot, ScrollOffsets } from './componentStyle';
+import { setElementPosition, snapshots } from './componentStyle';
 import type {
   AnimationCallback,
   AnimationConfig,
   AnimationNames,
   CustomConfig,
+  EasingType,
   KeyframeDefinitions,
 } from './config';
-import { WebEasings, getEasingByName } from './Easing.web';
-import type { WebEasingsNames } from './Easing.web';
-import type { TransitionData } from './animationParser';
+import { Animations, TransitionType } from './config';
 import { TransitionGenerator } from './createAnimation';
 import { scheduleAnimationCleanup } from './domUtils';
-import { LayoutAnimationType, ReduceMotion } from '../../commonTypes';
-import type { ReanimatedSnapshot, ScrollOffsets } from './componentStyle';
-import { setElementPosition, snapshots } from './componentStyle';
-import { Keyframe } from '../animationBuilder';
-import { ReducedMotionManager } from '../../ReducedMotion';
-import { prepareCurvedTransition } from './transition/Curved.web';
-import { EasingNameSymbol } from '../../Easing';
-import { logger } from '../../logger';
-import { _updatePropsJS } from '../../ReanimatedModule/js-reanimated';
-import type { ReanimatedHTMLElement } from '../../ReanimatedModule/js-reanimated';
+import type { WebEasingsNames } from './Easing';
+import { getEasingByName, maybeGetBezierEasing, WebEasings } from './Easing';
+import { prepareCurvedTransition } from './transition/Curved';
+
+function getSnapshotForElement(element: HTMLElement): ReanimatedSnapshot {
+  const existingSnapshot = snapshots.get(element);
+
+  if (existingSnapshot) {
+    return existingSnapshot;
+  }
+
+  const rect = element.getBoundingClientRect();
+
+  const fallbackSnapshot: ReanimatedSnapshot = {
+    top: rect.top,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height,
+    scrollOffsets: getElementScrollValue(element),
+  };
+
+  snapshots.set(element, fallbackSnapshot);
+
+  return fallbackSnapshot;
+}
 
 function getEasingFromConfig(config: CustomConfig): string {
   if (!config.easingV) {
     return getEasingByName('linear');
   }
 
-  const easingName = config.easingV[EasingNameSymbol];
+  const easingName = (config.easingV as EasingType)[EasingNameSymbol];
 
-  if (!(easingName in WebEasings)) {
-    logger.warn(`Selected easing is not currently supported on web.`);
+  if (easingName in WebEasings) {
+    return getEasingByName(easingName as WebEasingsNames);
+  }
+
+  const bezierEasing = maybeGetBezierEasing(
+    config.easingV as EasingFunctionFactory
+  );
+
+  if (!bezierEasing) {
+    logger.warn(
+      `Selected easing is not currently supported on web. Using linear easing instead.`
+    );
 
     return getEasingByName('linear');
   }
 
-  return getEasingByName(easingName as WebEasingsNames);
+  return bezierEasing;
 }
 
 function getRandomDelay(maxDelay = 1000) {
@@ -154,7 +189,7 @@ export function setElementAnimation(
   element: ReanimatedHTMLElement,
   animationConfig: AnimationConfig,
   shouldSavePosition = false,
-  parent: Element | null = null
+  originalElement?: ReanimatedHTMLElement
 ) {
   const { animationName, duration, delay, easing } = animationConfig;
 
@@ -163,6 +198,13 @@ export function setElementAnimation(
     element.style.animationDuration = `${duration}s`;
     element.style.animationDelay = `${delay}s`;
     element.style.animationTimingFunction = easing;
+
+    if (
+      animationConfig.animationType === LayoutAnimationType.ENTERING &&
+      delay > 0
+    ) {
+      element.style.animationFillMode = 'backwards';
+    }
   };
 
   if (animationConfig.animationType === LayoutAnimationType.ENTERING) {
@@ -173,27 +215,51 @@ export function setElementAnimation(
     configureAnimation();
   }
 
+  const maybeRunCleanup = () => {
+    if (!originalElement) {
+      return;
+    }
+
+    // Moving elements in DOM resets their scroll positions,
+    // so we save them before reparenting and restore after.
+    const scrollPositions = saveScrollPositions(element);
+
+    originalElement.style.visibility = 'initial';
+
+    while (element.firstChild) {
+      originalElement.appendChild(element.firstChild);
+    }
+
+    restoreScrollPositions(originalElement, scrollPositions, element);
+
+    element.removedAfterAnimation = true;
+    element.remove();
+
+    delete originalElement.dummyClone;
+  };
+
+  let wasCallbackCalled = false;
+  const maybeCallCallback = (finished: boolean) => {
+    if (!wasCallbackCalled && animationConfig.callback) {
+      animationConfig.callback(finished);
+      wasCallbackCalled = true;
+    }
+  };
+
   element.onanimationend = () => {
     if (shouldSavePosition) {
       saveSnapshot(element);
     }
 
-    if (parent?.contains(element)) {
-      element.removedAfterAnimation = true;
-      parent.removeChild(element);
-    }
+    maybeRunCleanup();
+    maybeCallCallback(true);
 
-    animationConfig.callback?.(true);
     element.removeEventListener('animationcancel', animationCancelHandler);
   };
 
   const animationCancelHandler = () => {
-    animationConfig.callback?.(false);
-
-    if (parent?.contains(element)) {
-      element.removedAfterAnimation = true;
-      parent.removeChild(element);
-    }
+    maybeRunCleanup();
+    maybeCallCallback(false);
 
     element.removeEventListener('animationcancel', animationCancelHandler);
   };
@@ -210,8 +276,11 @@ export function setElementAnimation(
   if (!(animationName in Animations)) {
     scheduleAnimationCleanup(animationName, duration + delay, () => {
       if (shouldSavePosition) {
-        setElementPosition(element, snapshots.get(element)!);
+        setElementPosition(element, getSnapshotForElement(element));
       }
+
+      maybeRunCleanup();
+      maybeCallCallback(false);
     });
   }
 }
@@ -290,16 +359,74 @@ function getElementScrollValue(element: HTMLElement): ScrollOffsets {
   return scrollOffsets;
 }
 
+function saveScrollPositions(root: Element) {
+  const positions = new Map<Element, { top: number; left: number }>();
+
+  const savePositions = (node: Element) => {
+    positions.set(node, { top: node.scrollTop, left: node.scrollLeft });
+    for (const child of Array.from(node.children)) {
+      savePositions(child);
+    }
+  };
+
+  savePositions(root);
+
+  return positions;
+}
+
+function restoreScrollPositions(
+  root: Element,
+  positions: Map<Element, { top: number; left: number }>,
+  savedRoot?: Element
+) {
+  const position = positions.get(savedRoot ?? root);
+
+  if (position) {
+    root.scrollTop = position.top;
+    root.scrollLeft = position.left;
+  }
+
+  for (const child of Array.from(root.children)) {
+    restoreScrollPositions(child, positions);
+  }
+}
+
+function cleanupEnteringAnimations(element: HTMLElement) {
+  const animationName = element.style.animationName;
+
+  // Check if the animation name indicates it's an entering animation
+  if (animationName && animationName.startsWith('REA-ENTERING-')) {
+    removeElementAnimation(element);
+  }
+
+  for (const child of Array.from(element.children)) {
+    if (child instanceof HTMLElement) {
+      cleanupEnteringAnimations(child);
+    }
+  }
+}
+
 export function handleExitingAnimation(
-  element: HTMLElement,
+  element: ReanimatedHTMLElement,
   animationConfig: AnimationConfig
 ) {
   const parent = element.offsetParent;
   const dummy = element.cloneNode() as ReanimatedHTMLElement;
-  dummy.reanimatedDummy = true;
 
-  element.style.animationName = '';
+  dummy.isDummy = true;
   dummy.style.animationName = '';
+
+  element.style.visibility = 'hidden';
+  element.dummyClone = dummy;
+  element.style.animationName = '';
+
+  // Moving elements in DOM resets their scroll positions
+  // so we memorize them here and restore after
+  const scrollPositions = saveScrollPositions(element);
+
+  // Clean up entering animations on all descendants before moving them to the dummy.
+  // This prevents entering animations from restarting when elements are moved to a new parent.
+  cleanupEnteringAnimations(element);
 
   // After cloning the element, we want to move all children from original element to its clone. This is because original element
   // will be unmounted, therefore when this code executes in child component, parent will be either empty or removed soon.
@@ -312,7 +439,9 @@ export function handleExitingAnimation(
 
   parent?.appendChild(dummy);
 
-  const snapshot = snapshots.get(element)!;
+  restoreScrollPositions(dummy, scrollPositions, element);
+
+  const snapshot = getSnapshotForElement(element);
 
   const scrollOffsets = getElementScrollValue(element);
 
@@ -339,5 +468,5 @@ export function handleExitingAnimation(
 
   setElementPosition(dummy, snapshot);
 
-  setElementAnimation(dummy, animationConfig, false, parent);
+  setElementAnimation(dummy, animationConfig, false, element);
 }
